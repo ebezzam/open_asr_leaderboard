@@ -1,37 +1,35 @@
 #!/bin/bash
-# Local script to submit HF Jobs for ABR ASR evaluation.
+# Local script to submit HF Jobs for MOSS-Transcribe-preview-2B evaluation.
 # Usage: HF_TOKEN=hf_... bash submit_jobs.sh
 
 # ── Configuration ────────────────────────────────────────────────────────────
-SPACE="${SPACE:-hf-audio/open-asr-leaderboard-abr}"
+SPACE="${SPACE:-hf-audio/open-asr-leaderboard-moss-transcribe}"
 RESULTS_BUCKET="${RESULTS_BUCKET:-hf-audio/asr_leaderboard_h200}"
 DATASET_PATH="${DATASET_PATH:-hf-audio/open-asr-leaderboard}"
 FLAVOR="${FLAVOR:-h200}"
 ORG_NAME="${ORG_NAME:-}"
-BATCH_SIZE=512
-WARMUP_STEPS=5
-SUBBATCH_SAMPLES=30000000
 
-# ── Models: "model_id revision" ──────────────────────────────────────────────
+# ── Models ────────────────────────────────────────────────────────────────────
 MODEL_CONFIGS=(
-    "abr-ai/niagara-19m-batch.en dab6545337495482f2fc05455432a7a05c88d3cc"
-    "abr-ai/niagara-38m-batch.en 4f3ec18d377b1fd01e94d15dc9b9db0a8cd74bd2"
+    "OpenMOSS-Team/MOSS-Transcribe-preview-2B"
 )
 
-# ── Datasets: "name split" ────────────────────────────────────────────────────
+# Pin the model repo revision for trust_remote_code stability (in case remote code changes).
+MODEL_REVISION="${MODEL_REVISION:-c4b3988677df13c14e79d9db59f356ed761db366}"
+
+# ── Datasets: "name split batch_size" ────────────────────────────────────────
 DATASET_CONFIGS=(
-    "ami_cleaned test"
-    "earnings22 test"
-    "gigaspeech_cleaned test"
-    "librispeech test.clean"
-    "librispeech test.other"
-    "spgispeech test"
-    "voxpopuli_cleaned_aa test"
+    "voxpopuli_cleaned_aa test 128"
+    "ami_cleaned test 128"
+    "earnings22 test 128"
+    "gigaspeech_cleaned test 128"
+    "librispeech test.clean 128"
+    "librispeech test.other 128"
+    "spgispeech test 128"
 )
 
 # ── Submit one job per model/dataset combination ─────────────────────────────
-for model_cfg in "${MODEL_CONFIGS[@]}"; do
-    read -r MODEL_ID REVISION <<< "$model_cfg"
+for MODEL_ID in "${MODEL_CONFIGS[@]}"; do
     MODEL_FOLDER="${MODEL_ID//\//-}"
 
     echo "████████████████████████████████████████████████████████████████████████████████"
@@ -39,9 +37,9 @@ for model_cfg in "${MODEL_CONFIGS[@]}"; do
     echo "████████████████████████████████████████████████████████████████████████████████"
 
     for cfg in "${DATASET_CONFIGS[@]}"; do
-        read -r DATASET SPLIT <<< "$cfg"
+        read -r DATASET SPLIT BATCH_SIZE <<< "$cfg"
 
-        echo "Submitting job: model=${MODEL_ID} dataset=${DATASET} split=${SPLIT}"
+        echo "Submitting job: model=${MODEL_ID} dataset=${DATASET} split=${SPLIT} batch_size=${BATCH_SIZE}"
 
         NAMESPACE_ARG=""
         [ -n "$ORG_NAME" ] && NAMESPACE_ARG="--namespace ${ORG_NAME}"
@@ -50,20 +48,19 @@ for model_cfg in "${MODEL_CONFIGS[@]}"; do
             --flavor "$FLAVOR" \
             --timeout 8h \
             --env HF_TOKEN="$HF_TOKEN" \
-            --env HF_AUDIO_DECODER_BACKEND=soundfile \
+            --env HF_AUDIO_DECODER_BACKEND="soundfile" \
             ${NAMESPACE_ARG} \
             --volume "hf://buckets/${RESULTS_BUCKET}:/results" \
             "hf.co/spaces/${SPACE}" \
             bash -c "
                 PYTHONPATH=/app python run_eval.py \
                     --model_id=${MODEL_ID} \
-                    --revision=${REVISION} \
+                    --model_revision=${MODEL_REVISION} \
                     --dataset_path=${DATASET_PATH} \
                     --dataset=${DATASET} \
                     --split=${SPLIT} \
+                    --device=0 \
                     --batch_size=${BATCH_SIZE} \
-                    --warmup_steps=${WARMUP_STEPS} \
-                    --subbatch_samples=${SUBBATCH_SAMPLES} \
                     --max_eval_samples=-1 &&
                 mkdir -p /results/${MODEL_FOLDER} &&
                 cp results/*.jsonl /results/${MODEL_FOLDER}/

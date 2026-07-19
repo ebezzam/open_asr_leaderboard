@@ -12,17 +12,18 @@ ORG_NAME="${ORG_NAME:-}"
 # ── Models: "model_id batch_size" ────────────────────────────────────────────
 MODEL_CONFIGS=(
     "soundsgoodai/Zipformer-transducer-XL-290M 64"
+    "soundsgoodai/Zipformer-cr-ctc-transducer-XL-290M 64"
 )
 
 # ── Datasets: "name split" ────────────────────────────────────────────────────
 DATASET_CONFIGS=(
-    "ami test"
+    "ami_cleaned test"
+    "gigaspeech_cleaned test"
+    "voxpopuli_cleaned_aa test"
     "earnings22 test"
-    "gigaspeech test"
     "librispeech test.clean"
     "librispeech test.other"
     "spgispeech test"
-    "voxpopuli test"
 )
 
 # ── Submit one job per model/dataset combination ─────────────────────────────
